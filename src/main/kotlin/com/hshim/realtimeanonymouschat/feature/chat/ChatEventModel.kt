@@ -1,9 +1,25 @@
 package com.hshim.realtimeanonymouschat.feature.chat
 
+import com.hshim.realtimeanonymouschat.database.entity.chat.Chat
+import io.autocrypt.sakarinblue.universe.util.DateUtil.dateToString
+
 class ChatEventModel {
     class SessionInfo(
         val id: String,
-    ): BaseChatEventModel("session_info")
+        val beforeChats: List<BeforeChat>,
+    ): BaseChatEventModel("session_info") {
+        class BeforeChat(
+            val content: String,
+            val sessionId: String,
+            val createDate: String,
+        ) {
+            constructor(chat: Chat): this (
+                chat.content,
+                chat.sessionId,
+                chat.createDate.dateToString(),
+            )
+        }
+    }
 
     class JoinInfo(
         val id: String,

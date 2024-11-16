@@ -6,3 +6,21 @@ server:
       force: true
   error:
     include-message: always
+
+spring:
+  jackson:
+    time-zone: Asia/Seoul
+  datasource:
+    url: jdbc:mariadb://${db_url}/chat?autoReconnect=true&rewriteBatchedStatements=true
+    username: ${db_username}
+    password: ${db_password}
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      generate-ddl: false
+      hibernate:
+        show_sql: false
+        default_batch_fetch_size: 50
+        format_sql: true

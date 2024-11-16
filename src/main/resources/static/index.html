@@ -44,6 +44,7 @@
     let userMapping = {};
     let anonymousCount = 0;
     let isComposing = false;
+    let lastSessionId = ''; // 이전 메시지의 세션 ID를 추적
 
     const groupId = new URLSearchParams(window.location.search).get("group-id");
     if (groupId !== null) {
@@ -80,6 +81,12 @@
         switch (message.eventName) {
             case 'session_info':
                 mySessionId = message.id;
+                // Display previous chat messages
+                if (message.beforeChats && Array.isArray(message.beforeChats)) {
+                    message.beforeChats.forEach(chat => {
+                        displayChatMessage(chat.sessionId, chat.content, chat.createDate);
+                    });
+                }
                 break;
 
             case 'join_info':
@@ -89,14 +96,15 @@
                 break;
 
             case 'chat_info':
-                displayChatMessage(message.id, message.content);
+                displayChatMessage(message.id, message.content, new Date().toISOString());
                 break;
         }
     }
 
-    function displayChatMessage(id, content) {
+    function displayChatMessage(id, content, createDate) {
         const isMyMessage = id === mySessionId;
         let userLabel = '나';
+        let showUserLabel = true;
 
         if (!isMyMessage) {
             if (!userMapping[id]) {
@@ -104,19 +112,36 @@
                 userMapping[id] = `익명${anonymousCount}`;
             }
             userLabel = userMapping[id];
+            showUserLabel = lastSessionId !== id; // 이전 메시지의 세션 ID와 다를 경우에만 표시
         }
 
-        // Convert URLs in content to hyperlinks
-        content = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+        lastSessionId = id; // 현재 메시지의 세션 ID를 저장
 
+        // Format the createDate for display
+        const timestamp = new Date(createDate).toLocaleTimeString();
+
+        // Create chat message element and set textContent to prevent HTML rendering
         const chatElement = document.createElement('div');
         chatElement.classList.add('message', isMyMessage ? 'right' : 'left');
 
-        chatElement.innerHTML = `
-        <div class="username">${isMyMessage ? '' : userLabel}</div>
-        <div class="message-bubble">${content}</div>
-        <div class="timestamp" style="align-self: ${isMyMessage ? 'flex-end' : 'flex-start'};">${new Date().toLocaleTimeString()}</div>
-    `;
+        if (showUserLabel) {
+            const usernameDiv = document.createElement('div');
+            usernameDiv.classList.add('username');
+            usernameDiv.textContent = isMyMessage ? '' : userLabel;
+            chatElement.appendChild(usernameDiv);
+        }
+
+        const messageBubble = document.createElement('div');
+        messageBubble.classList.add('message-bubble');
+        messageBubble.textContent = content; // Safe text rendering with textContent
+
+        const timestampDiv = document.createElement('div');
+        timestampDiv.classList.add('timestamp');
+        timestampDiv.style.alignSelf = isMyMessage ? 'flex-end' : 'flex-start';
+        timestampDiv.textContent = timestamp;
+
+        chatElement.appendChild(messageBubble);
+        chatElement.appendChild(timestampDiv);
         chatBox.appendChild(chatElement);
 
         const threshold = 200; // Allowable pixels from the bottom to consider as "scrolled to bottom"
