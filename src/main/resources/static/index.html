@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/index.css"/>
+    <title>익명채팅</title>
+</head>
+<body>
+<div id="container">
+    <form id="joinForm">
+        <input type="text" id="groupId" placeholder="고유번호 입력" required>
+        <button type="submit">입장</button>
+    </form>
+
+    <div id="chatContainer">
+        <div id="header">
+            <span id="userCount">현재 인원: 0명</span>
+            <button id="leaveButton">나가기</button>
+        </div>
+        <div id="chatBox">
+            <div id="newMessageAlert">새로운 채팅이 있습니다.</div>
+        </div>
+        <div id="chatInputContainer">
+            <input type="text" id="chatInput" placeholder="메시지를 입력하세요">
+            <button id="sendButton" disabled>전송</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const joinForm = document.getElementById('joinForm');
+    const groupIdInput = document.getElementById('groupId');
+    const chatContainer = document.getElementById('chatContainer');
+    const chatBox = document.getElementById('chatBox');
+    const chatInput = document.getElementById('chatInput');
+    const sendButton = document.getElementById('sendButton');
+    const userCountLabel = document.getElementById('userCount');
+    const leaveButton = document.getElementById('leaveButton');
+    const newMessageAlert = document.getElementById('newMessageAlert');
+
+    let websocket;
+    let mySessionId = '';
+    let userMapping = {};
+    let anonymousCount = 0;
+    let isComposing = false;
+
+    const groupId = new URLSearchParams(window.location.search).get("group-id");
+    if (groupId !== null) {
+        websocket = new WebSocket(`${window.location.origin.replace('http', 'ws')}/chat/connect?groupId=${encodeURIComponent(groupId)}`);
+        websocket.onopen = () => {
+            chatContainer.style.display = 'flex';
+            joinForm.style.display = 'none';
+        };
+
+        websocket.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            handleIncomingMessage(message);
+        };
+
+        websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        websocket.onclose = () => {
+            alert('채팅이 종료되었습니다.');
+            window.location.href = '/';
+        };
+    }
+
+    joinForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const groupId = groupIdInput.value.trim();
+        if (groupId) {
+            window.location.href = `${window.location.origin}?group-id=${groupId}`;
+        }
+    });
+
+    function handleIncomingMessage(message) {
+        switch (message.eventName) {
+            case 'session_info':
+                mySessionId = message.id;
+                break;
+
+            case 'join_info':
+            case 'exit_info':
+                userCountLabel.textContent = `현재 인원: ${message.userCnt}명`;
+                sendButton.disabled = chatInput.value.trim() === '' || message.userCnt <= 1;
+                break;
+
+            case 'chat_info':
+                displayChatMessage(message.id, message.content);
+                break;
+        }
+    }
+
+    function displayChatMessage(id, content) {
+        const isMyMessage = id === mySessionId;
+        let userLabel = '나';
+
+        if (!isMyMessage) {
+            if (!userMapping[id]) {
+                anonymousCount++;
+                userMapping[id] = `익명${anonymousCount}`;
+            }
+            userLabel = userMapping[id];
+        }
+
+        // Convert URLs in content to hyperlinks
+        content = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+
+        const chatElement = document.createElement('div');
+        chatElement.classList.add('message', isMyMessage ? 'right' : 'left');
+
+        chatElement.innerHTML = `
+        <div class="username">${isMyMessage ? '' : userLabel}</div>
+        <div class="message-bubble">${content}</div>
+        <div class="timestamp" style="align-self: ${isMyMessage ? 'flex-end' : 'flex-start'};">${new Date().toLocaleTimeString()}</div>
+    `;
+        chatBox.appendChild(chatElement);
+
+        const threshold = 200; // Allowable pixels from the bottom to consider as "scrolled to bottom"
+        const isScrolledToBottom = (chatBox.scrollHeight - chatBox.clientHeight - chatBox.scrollTop) <= threshold;
+
+        if (isMyMessage || isScrolledToBottom) {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        } else {
+            newMessageAlert.style.display = 'block';
+        }
+    }
+
+    chatBox.addEventListener('scroll', () => {
+        const threshold = 200; // Allowable pixels from the bottom to consider as "scrolled to bottom"
+        const isScrolledToBottom = (chatBox.scrollHeight - chatBox.clientHeight - chatBox.scrollTop) <= threshold;
+
+        if (isScrolledToBottom) {
+            newMessageAlert.style.display = 'none';
+        }
+    });
+
+    newMessageAlert.addEventListener('click', () => {
+        chatBox.scrollTop = chatBox.scrollHeight;
+        newMessageAlert.style.display = 'none';
+    });
+
+    chatInput.addEventListener('compositionstart', () => {
+        isComposing = true;
+    });
+
+    chatInput.addEventListener('compositionend', () => {
+        isComposing = false;
+    });
+
+    chatInput.addEventListener('input', () => {
+        sendButton.disabled = chatInput.value.trim() === '';
+    });
+
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !isComposing && !sendButton.disabled) {
+            sendMessage();
+        }
+    });
+
+    sendButton.addEventListener('click', () => {
+        sendMessage();
+    });
+
+    function sendMessage() {
+        if (websocket && chatInput.value.trim() !== '') {
+            chatBox.scrollTop = chatBox.scrollHeight;
+            websocket.send(chatInput.value.trim());
+            chatInput.value = '';
+            sendButton.disabled = true;
+        }
+    }
+
+    leaveButton.addEventListener('click', () => {
+        window.location.href = '/';
+    });
+</script>
+</body>
+</html>
